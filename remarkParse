@@ -1,0 +1,128 @@
+var fs = require('fs')
+var unified = require('unified')
+var markdown = require('remark-parse')
+var html = require('remark-html')
+
+const remark = require('remark');
+
+const renderer = remark()
+  .use(inlineTagDefs)
+  // USEFUL DEBUGGING CODE
+  //   .use(() => tree => {
+  //       console.log(require('util').inspect(tree, { colors: true, depth: 4 }));
+  //       })
+  .use(text)
+  .use(html)
+  .process(fs.readFileSync('example.md'), function (err, file) {
+    if (err) throw err
+    console.log(String(file))
+  });
+
+function text() {
+  const pathToTree = (input) => {
+    let root = [];
+    for (let i = 0; i < input.length; i++) {
+      let chain = input[i].split("/");
+      let currentHierarchy = root;
+      for (let j = 0; j < chain.length; j++) {
+        let wantedNode = chain[j]
+        if (wantedNode === '') {
+          continue;
+        }
+        let lastHierarchy = currentHierarchy;
+
+        // 遍历root是否已有该层级
+        for (let k = 0; k < currentHierarchy.length; k++) {
+          if (currentHierarchy[k].title === wantedNode) {
+            currentHierarchy = currentHierarchy[k].children;
+            break;
+          }
+        }
+
+        if (lastHierarchy === currentHierarchy) {
+          let key;
+          if (j === chain.length - 1) {
+            key = input[i];
+          } else {
+            key = chain.slice(0, j + 1).join('/') + '/';
+          }
+          let newNode = {
+            key: key,
+            title: wantedNode,
+            children: []
+          };
+          // 文件，最后一个字符不是"/“符号
+          if (j === chain.length - 1) {
+            delete newNode.children;
+          }
+          currentHierarchy.push(newNode);
+          currentHierarchy = newNode.children;
+        }
+      }
+    }
+
+    return root;
+  }
+
+  var arr = [
+    "root/",
+    "root/a/",
+    "root/a/new_b.png",
+    "root/a/qa/",
+    "root/a/qa/新建文本文档 (3).txt",
+    "root/asdfasdfasdfasdfasdfasdfasdf.txt",
+    "root/b.png",
+    "root/instqj_gfzqhk.exe",
+    "root/jupyter_notebook.png",
+    "root/new_b.png",
+    "root/output/new_b.png",
+    "root/soffice.exe",
+    "root/ti/asdfasdfasdfasdfasdfasdfasdf.txt",
+    "root/watermark.zip",
+    "root/中华人民共和国国民经济和社会发展 第十三个五年规划纲要 .pdf",
+    "root/国务院发布《中国制造2025》%28全文%29.pdf",
+    "root/新建文本文档 (3).txt",
+    "root/新建文本文档.txt",
+    "root/沧海一声笑.docx",
+    "root/理光C2011SP.exe"
+  ];
+
+  console.log(pathToTree(arr));
+
+}
+
+
+function inlineTagDefs() {
+  const Parser = this.Parser;
+  const inlineTokenizers = Parser.prototype.inlineTokenizers;
+  const inlineMethods = Parser.prototype.inlineMethods;
+  const blockTokenizers = Parser.prototype.blockTokenizers;
+  const blockMethods = Parser.prototype.blockMethods;
+
+  blockTokenizers.inlineTag = tokenizeInlineTag;
+  blockMethods.splice(blockMethods.indexOf('paragraph'), 0, 'inlineTag');
+
+  inlineTokenizers.inlineTag = tokenizeInlineTag;
+  inlineMethods.splice(blockMethods.indexOf('text'), 0, 'inlineTag');
+  tokenizeInlineTag.notInLink = true;
+  tokenizeInlineTag.locator = inlineTagLocator;
+
+  function tokenizeInlineTag(eat, value, silent) {
+    const match = /^\{@[^\s\}]+[^\}]*\}/.exec(value);
+
+    if (match) {
+      if (silent) {
+        return true;
+      }
+      return eat(match[0])({
+        'type': 'inlineTag',
+        'value': match[0]
+      });
+    }
+  }
+
+  function inlineTagLocator(value, fromIndex) {
+    return value.indexOf('{@', fromIndex);
+  }
+}
+
